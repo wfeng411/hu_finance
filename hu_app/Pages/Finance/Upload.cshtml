@@ -1,0 +1,235 @@
+﻿@page
+@model hu_app.Pages.Finance.UploadModel
+@{
+    ViewData["Title"] = "Finance - Upload";
+}
+
+@section Styles{
+    <style>
+        .upload-buttons {
+            min-width: 80px;
+        }
+
+        .item-name {
+            width: 100%;
+            border: 0;
+            border-bottom: 1px solid grey;
+        }
+
+        .status-div {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+}
+
+<div id="app" v-cloak>
+    <div class="mt-2">
+        <input class="form-control" v-model="transactionsSource" />
+        <div class="mt-3 mb-3">
+            <div class="btn-group mr-3 mb-2">
+                @foreach (var u in Model.TransactionTypes)
+                {
+                    <button type="button"
+                            :class="['btn', 'upload-buttons', selectedTransactionTypeId === '@u.Value' ? 'btn-primary' : 'btn-outline-primary']"
+                            @@click="selectTransactionType('@u.Value')">
+                        @u.Text
+                    </button>
+                }
+            </div>
+            <div class="btn-group mr-3 mb-2">
+                @foreach (var u in Model.Users)
+                {
+                    <button type="button"
+                            :class="['btn', 'upload-buttons', selectedUserId === '@u.Value' ? 'btn-primary' : 'btn-outline-primary']"
+                            @@click="selectWho('@u.Value')">
+                        @u.Text
+                    </button>
+                }
+            </div>
+            <button type="button"
+                    class="btn btn-primary mb-2 upload-buttons"
+                    v-if="selectedTransactionTypeId && selectedUserId && parsedTransactions.filter(x=>x.new).length"
+                    @@click="sendTransactions()">
+                Send
+            </button>
+        </div>
+    </div>
+    <div class="mt-4" v-if="parsedTransactions.length">
+        <table class="table table-bordered table-sm">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Date</th>
+                    <th>Item</th>
+                    <th>Merchant</th>
+                    <th>Debit</th>
+                    <th>Credit</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr v-for="t in parsedTransactions">
+                    <td class="w-50">
+                        <div class="text-center status-div">
+                            <i class="fas fa-circle text-success" v-if="t.new"></i>
+                            <i class="fas fa-circle text-muted" v-if="t.exist"></i>
+                            <i class="fas fa-circle text-danger" v-if="t.error"></i>
+                        </div>
+                    </td>
+                    <td>{{t.date}}</td>
+                    <td><input class="item-name" v-model="t.itemName" @@keyup="checkTransaction(t)" /></td>
+                    <td>
+                        <span v-if="t.merchantName !== null">{{t.merchantName}}</span>
+                        <button class="btn btn-sm btn-primary float-right"
+                                v-else
+                                data-toggle="modal"
+                                data-target="#editMerchantModal"
+                                data-backdrop="static">
+                            Create Merchant
+                        </button>
+                    </td>
+                    <td>{{displayCurrency(t.debit)}}</td>
+                    <td>{{displayCurrency(t.credit)}}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <partial name="_EditMerchant" />
+</div>
+@Html.AntiForgeryToken()
+
+
+@section Scripts{
+    <script>
+        var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        var lastDatePosition = 0;
+        var app = new Vue({
+            el: '#app',
+            data: {
+                transactionsSource: '',
+                parsedTransactions: [],
+                selectedTransactionTypeId: null,
+                selectedUserId: null,
+                merchant: {}
+            },
+            watch: {
+                transactionsSource: function () {
+                    this.parsedTransactions = [];
+                    lastDatePosition = 0;
+                    for (let i = 0; i < this.transactionsSource.length; i++) {
+                        var part = this.transactionsSource.substr(i, 3);
+                        var oneTransactionString = '';
+                        if (MONTHS.includes(part) && this.transactionsSource[i + 3] === ' ') {
+                            if (i !== lastDatePosition) {
+                                oneTransactionString = this.transactionsSource.substr(lastDatePosition, i - lastDatePosition - 2);
+                                lastDatePosition = i;
+                            }
+                        }
+                        else if (i === this.transactionsSource.length - 1) {
+                            oneTransactionString = this.transactionsSource.substr(lastDatePosition, i - lastDatePosition + 1);
+                        }
+                        if (oneTransactionString) {
+                            var oneTransactionParts = oneTransactionString.split('\t');
+                            var transaction = {
+                                index: i,
+                                date: moment(oneTransactionParts[0], 'MMM DD, YYYY').format('YYYY-MM-DD'),
+                                itemName: oneTransactionParts[1],
+                                debit: null,
+                                credit: null,
+                                transactionTypeId: this.selectedTransactionTypeId,
+                                userId: this.selectedUserId,
+                                new: false,
+                                exist: false,
+                                error: false,
+                            };
+                            if (oneTransactionParts[2].length) {
+                                transaction.debit = Number(oneTransactionParts[2].replace(/,/g, '').replace(/\$/g, ''));
+                            }
+                            else {
+                                transaction.credit = Number(oneTransactionParts[3].replace(/,/g, '').replace(/\$/g, ''));
+                            }
+                            this.parsedTransactions.push(transaction)
+                            if (transaction.transactionTypeId && transaction.userId) {
+                                this.checkTransaction(transaction);
+                            }
+                        }
+                    }
+                }
+            },
+            methods: {
+                sendTransactions: function () {
+                    var self = this;
+                    var data = self.parsedTransactions.filter(x => x.new);
+                    if (!data.length) {
+                        return;
+                    }
+                    HuTool.Post({
+                        url: '/Finance/Upload?handler=SaveTransactions',
+                        data: { transactions: data },
+                        success: function (data) {
+                            self.selectedTransactionTypeId = null;
+                            self.selectedUserId = null;
+                            self.transactionsSource = '';
+                            self.parsedTransactions = [];
+                            Snackbar.show({
+                                text: `${data.transactionsCreatedCount} transactions created. ${data.itemsCreatedCount} items created. ${data.itemsNeedToMapCount} items need to map.`,
+                                showAction: false
+                            });
+                        }
+                    });
+                },
+                selectTransactionType: function (id) {
+                    this.selectedTransactionTypeId = id;
+                    this.parsedTransactions.forEach(x => {
+                        x.transactionTypeId = id;
+                        if (x.userId) {
+                            this.checkTransaction(x);
+                        }
+                    });
+                },
+                selectWho: function (id) {
+                    this.selectedUserId = id;
+                    this.parsedTransactions.forEach(x => {
+                        x.userId = id;
+                        if (x.transactionTypeId) {
+                            this.checkTransaction(x);
+                        }
+                    });
+                },
+                checkTransaction(transaction) {
+                    HuTool.Post({
+                        url: '/Finance/Upload?handler=CheckTransaction',
+                        data: { transaction },
+                        success: function (data) {
+                            transaction.new = data.result === '@HuConstants.Finance.TransactionResult.New';
+                            transaction.exist = data.result === '@HuConstants.Finance.TransactionResult.Exist';
+                            transaction.error = data.result === '@HuConstants.Finance.TransactionResult.Error';
+                            transaction.merchantName = data.merchantName;
+                        }
+                    });
+                },
+                addMerchant: function (item) {
+                    this.merchant = {
+                        id: null,
+                        merchantName: null,
+                        note: null,
+                        expenseTypeId: null,
+                        ignore: false
+                    };
+                },
+                saveMerchant: function () {
+                    HuTool.Post({
+                        url: '/Finance/Merchants?handler=SaveMerchant',
+                        data: this.merchant,
+                        success: function () {
+                            location.reload();
+                        }
+                    });
+                },
+                displayCurrency: function (amount) {
+                    return HuTool.Format.Currency(amount);
+                }
+            }
+        });
+    </script>
+}

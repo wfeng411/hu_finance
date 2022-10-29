@@ -1,0 +1,190 @@
+﻿@page
+@model hu_app.Pages.Finance.IncomeModel
+@{
+    ViewData["Title"] = "Finance - Income";
+    var colors = new Dictionary<int, string> {
+        { 0, "#9fd8df" },
+        { 1, "#ff7171" },
+        { 2, "#f5c0c0" },
+        { 3, "#f0e4d7" },
+        { 4, "#41b3ba" },
+        { 5, "#c38d9e" },
+    };
+}
+
+@section Styles {
+    <style>
+        #months {
+            overflow: auto;
+            white-space: nowrap;
+        }
+
+        .percentage-div {
+            height: 20px;
+            border-radius: 5px;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+        }
+
+        .percentage-text {
+            font-size: 11px;
+            margin-left: 5px;
+        }
+
+        .income-table th,
+        .income-table td {
+            white-space: nowrap;
+        }
+    </style>
+}
+
+<ul class="pagination">
+    <li class="page-item disabled"><a class="page-link" href="#">Year</a></li>
+    @for (int y = 2020; y <= DateTime.Now.Year; y++)
+    {
+        <li class="page-item @(y == Model.Year ? "active" : string.Empty)"><a class="page-link" href="/Finance/Income?year=@y">@y</a></li>
+    }
+</ul>
+<div id="months">
+    @if (Model.Year.HasValue && Model.Year != 0)
+    {
+        <ul class="pagination">
+            <li class="page-item disabled"><a class="page-link" href="#">Month</a></li>
+            <li class="page-item @(!Model.Month.HasValue || Model.Month == 0 ? "active" : string.Empty)"><a class="page-link" href="/Finance/Income?year=@Model.Year">All</a></li>
+            @for (int m = 1; m <= 12; m++)
+            {
+                var month = Enum.GetName(typeof(HuEnums.Month), m);
+                <li class="page-item @(m == Model.Month ? "active" : string.Empty)"><a class="page-link" href="/Finance/Income?year=@Model.Year&month=@m">@month</a></li>
+            }
+        </ul>
+    }
+</div>
+@{
+    var huIncomes = Model.TransactionDTOs.Where(x => x.Who == "hu").OrderBy(x => x.MerchantName).ToList();
+    var tuIncomes = Model.TransactionDTOs.Where(x => x.Who == "tu").OrderBy(x => x.MerchantName).ToList();
+    var huIncomeAmount = huIncomes.Sum(x => x.Credit);
+    var tuIncomeAmount = tuIncomes.Sum(x => x.Credit);
+    var groupedHuIncomes = huIncomes.GroupBy(x => x.MerchantName).OrderByDescending(x => x.Sum(x => x.Credit));
+    var groupedTuIncomes = tuIncomes.GroupBy(x => x.MerchantName).OrderByDescending(x => x.Sum(x => x.Credit));
+}
+@if (huIncomeAmount != 0 || tuIncomeAmount != 0)
+{
+    <div class="card">
+        <div class="card-body">
+            @if (huIncomeAmount > tuIncomeAmount)
+            {
+                <div>虎： @huIncomeAmount.Value.ToString("C")</div>
+                <div class="percentage-container">
+                    @{
+                        int groupedHuIncomeIndex = 0;
+                        decimal huCurrentPosition = 0;
+                    }
+                    @foreach (var groupedHuIncome in groupedHuIncomes)
+                    {
+                        decimal groupedHuIncomeTotal = groupedHuIncome.Sum(x => x.Credit).Value;
+                        string backgroundColor = $"background-color:{colors[groupedHuIncomeIndex]};";
+                        decimal widthValue = groupedHuIncomeTotal / huIncomeAmount.Value * 100;
+                        string width = $"width:{widthValue}%;";
+                        string marginLeft = $"margin-left:{huCurrentPosition}%;";
+                        huCurrentPosition += widthValue;
+                        <div class="percentage-div"
+                             style="@(backgroundColor)@(width)@(marginLeft)">
+                            <span class="percentage-text income-index-@groupedHuIncomeIndex">@groupedHuIncome.Key @groupedHuIncomeTotal.ToString("C")</span>
+                        </div>
+                        groupedHuIncomeIndex++;
+                    }
+                </div>
+                <div>兔：@tuIncomeAmount.Value.ToString("C")</div>
+                <div class="percentage-container">
+                    @{
+                        int groupedTuIncomeIndex = 0;
+                        decimal tuCurrentPosition = 0;
+                    }
+                    @foreach (var groupedTuIncome in groupedTuIncomes)
+                    {
+                        decimal groupedTuIncomeTotal = groupedTuIncome.Sum(x => x.Credit).Value;
+                        string backgroundColor = $"background-color:{colors[groupedTuIncomeIndex]};";
+                        decimal widthValue = groupedTuIncome.Sum(x => x.Credit).Value / huIncomeAmount.Value * 100;
+                        string width = $"width:{widthValue}%;";
+                        string marginLeft = $"margin-left:{tuCurrentPosition}%;";
+                        tuCurrentPosition += widthValue;
+                        <div class="percentage-div"
+                             style="@(backgroundColor)@(width)@(marginLeft)">
+                            <span class="percentage-text income-index-@groupedTuIncomeIndex">@groupedTuIncome.Key @groupedTuIncomeTotal.ToString("C")</span>
+                        </div>
+                        groupedTuIncomeIndex++;
+                    }
+                </div>
+            }
+            else if (tuIncomeAmount > huIncomeAmount)
+            {
+                <div>@huIncomeAmount.Value.ToString("C")</div>
+                <div class="percentage-container">
+                    @{
+                        int groupedHuIncomeIndex = 0;
+                    }
+                    @foreach (var groupedHuIncome in groupedHuIncomes)
+                    {
+                        <div class="percentage-div"
+                             style="background-color:@colors[groupedHuIncomeIndex];width:@(groupedHuIncome.Sum(x=>x.Credit) / tuIncomeAmount.Value * 100)%;">
+                            <span class="percentage-text income-index-@groupedHuIncomeIndex">@groupedHuIncome.Key</span>
+                        </div>
+                        groupedHuIncomeIndex++;
+                    }
+                </div>
+                <div>@tuIncomeAmount.Value.ToString("C")</div>
+                <div class="percentage-container">
+                    @{
+                        int groupedTuIncomeIndex = 0;
+                    }
+                    @foreach (var groupedTuIncome in groupedTuIncomes)
+                    {
+                        <div class="percentage-div"
+                             style="background-color:@colors[groupedTuIncomeIndex];width:@(groupedTuIncome.Sum(x=>x.Credit) / tuIncomeAmount.Value * 100)%;">
+                            <span class="percentage-text income-index-@groupedTuIncomeIndex">@groupedTuIncome.Key</span>
+                        </div>
+                        groupedTuIncomeIndex++;
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+<div class="table-responsive mt-4">
+    <table class="table table-bordered table-sm income-table">
+        <thead>
+            <tr>
+                <th class="text-center">Who</th>
+                <th>From</th>
+                <th>Date</th>
+                <th>
+                    <div class="d-flex justify-content-between">
+                        <div>Amount</div>
+                        <div>@Model.TransactionDTOs.Sum(x => x.Credit).Value.ToString("C")</div>
+                    </div>
+                </th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var t in Model.TransactionDTOs)
+            {
+                <tr>
+                    <td class="text-center"><div class="@t.Who.ToLower()">@t.Who_CN</div></td>
+                    <td>@t.MerchantName</td>
+                    <td>@t.Date.ToString("yyyy-MM-dd")</td>
+                    <td class="text-right">
+                        @if (t.Credit.HasValue)
+                        {
+                            <span>@t.Credit.Value.ToString("C")</span>
+                        }
+                        else
+                        {
+                            <span style="color:red">-@t.Debit.Value.ToString("C")</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

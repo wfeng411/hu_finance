@@ -1,0 +1,150 @@
+﻿@page
+@model hu_app.Pages.DashboardModel
+
+@section Styles {
+    <style>
+        .card {
+            box-shadow: 0 1px 4px 0 rgb(0 0 0 / 14%);
+            margin: 8px 0;
+        }
+
+        .dashboard-icon i {
+            font-size: 48px;
+            color: #7689de;
+        }
+
+        .summary {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .summary-detail {
+            text-align: right;
+        }
+
+        .transactions {
+            overflow-y: auto;
+            font-size: 14px;
+        }
+
+            .transactions td {
+                padding: 0 6px;
+            }
+    </style>
+}
+
+<div class="container dashboard" id="app">
+    <div class="alert alert-danger" v-if="error">{{ error }}</div>
+    <div class="row" v-else>
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div>User Name: {{ currentUser.userName }}</div>
+                    <div>Name: {{ currentUser.name }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6 col-sm-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="summary">
+                        <div class="dashboard-icon">
+                            <i class="fas fa-wallet"></i>
+                        </div>
+                        <div class="summary-detail" v-if="finance.summary">
+                            <div style="font-size:15px;color:#9a9a9a;">
+                                Expense
+                            </div>
+                            <div style="font-size:18px;font-weight:600;">
+                                {{ finance.summary.expense | currency }}
+                            </div>
+                            <div style="font-size:15px;color:#9a9a9a;">
+                                Income
+                            </div>
+                            <div style="font-size:18px;font-weight:600;">
+                                {{ finance.summary.income | currency }}
+                            </div>
+                            <div style="font-size:15px;color:#9a9a9a;">
+                                Income
+                            </div>
+                            <div style="font-size:18px;font-weight:600;">
+                                {{ finance.summary.income - finance.summary?.expense | currency }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6 col-sm-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="transactions" :style="{ height: finance.transactions ? '300px' : 'auto'}">
+                        <div class="dashboard-icon">
+                            <i class="fas fa-shopping-cart"></i>
+                        </div>
+                        <table class="table table-sm" style="margin-top:12px" v-if="finance.transactions">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Item</th>
+                                    <th class="text-center">Who</th>
+                                    <th class="text-right">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="t in finance.transactions">
+                                    <td>{{ t.date | date }}</td>
+                                    <td>{{ t.itemName }}</td>
+                                    <td class="text-center">{{ t.who }}</td>
+                                    <td :class="['text-right', t.isCredit ? 'text-success' : 'text-danger']">{{ t.amount | currency }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@section Scripts {
+    <script src="~/lib/signalr.min.js"></script>
+    <script>
+        var fails = 0;
+        var connection = new signalR.HubConnectionBuilder().withUrl("/DashboardHub").build();
+        async function start() {
+            try {
+                await connection.start();
+                fails = 0
+                app.error = null;
+            } catch (err) {
+                fails++;
+                if (fails > 2) {
+                    app.error = "Connection lost.";
+                }
+                setTimeout(start, 1000);
+            }
+        };
+        connection.onclose(async () => {
+            app.error = "Reconnecting...";
+            await start();
+        });
+        start();
+
+        connection.on("UpdateData", function (data) {
+            app.finance = data.finance;
+        });
+
+        var app = new Vue({
+            el: '#app',
+            data: {
+                currentUser: {},
+                finance: {},
+                error: null
+            },
+            methods: {
+            }
+        });
+    </script>
+}

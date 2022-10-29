@@ -1,0 +1,309 @@
+﻿@page
+@model hu_app.Pages.Finance.BalanceModel
+@{
+    ViewData["Title"] = "Finance - Balance";
+}
+
+@section Styles {
+    <style>
+        #months {
+            overflow: auto;
+            white-space: nowrap;
+        }
+
+        #balance {
+            font-size: 10px;
+            font-weight: 500;
+        }
+
+        .credit,
+        .debit {
+            border-top: 1px solid black;
+            width: 20px
+        }
+
+        .credit {
+            background-color: green;
+        }
+
+        .debit {
+            background-color: red;
+        }
+
+        .credit-text,
+        .debit-text {
+            white-space: nowrap;
+            padding-left: 25px;
+            margin-top: -5px;
+            position: relative;
+        }
+
+        .other-text {
+            position: relative;
+            top: 3px;
+            margin-left: 25px;
+        }
+
+        .frequency {
+            width: 20px;
+            position: relative;
+            line-height: 8px;
+        }
+
+        .merchant-name {
+            margin-top: -10px;
+        }
+
+        #transaction-table {
+            font-size: 12px;
+        }
+
+            #transaction-table input[type=checkbox] {
+                position: relative;
+                top: 2px;
+            }
+
+                #transaction-table input[type=checkbox]:hover {
+                    cursor: pointer;
+                }
+
+            #transaction-table th,
+            #transaction-table td {
+                margin: 0;
+                padding: 0;
+            }
+    </style>
+}
+
+
+<div id="app" v-cloak>
+    <ul class="pagination">
+        <li class="page-item disabled"><a class="page-link" href="#">Year</a></li>
+        @for (int y = 2020; y <= DateTime.Now.Year; y++)
+        {
+            <li :class="['page-item', { active: filter.year === @y }]">
+                <a class="page-link" href="#" @@click="changeFilter('year', @y)">@y</a>
+            </li>
+        }
+    </ul>
+    <div id="months">
+        <ul class="pagination">
+            <li class="page-item disabled">
+                <a class="page-link" href="#">Month</a>
+            </li>
+            @for (int m = 1; m <= 12; m++)
+            {
+                var month = Enum.GetName(typeof(HuEnums.Month), m);
+                <li :class="['page-item', { active: filter.month === @m }]">
+                    <a class="page-link" href="#" @@click="changeFilter('month', @m)">@month</a>
+                </li>
+            }
+        </ul>
+    </div>
+    <ul class="pagination">
+        <li class="page-item disabled"><a class="page-link" href="#">Who</a></li>
+        <li :class="['page-item', { active: filter.userId === '@HuConstants.HuApp.User.Hu' }]">
+            <a class="page-link" href="#" @@click="changeFilter('userId', '@HuConstants.HuApp.User.Hu')">虎</a>
+        </li>
+        <li :class="['page-item', { active: filter.userId === '@HuConstants.HuApp.User.Tu' }]">
+            <a class="page-link" href="#" @@click="changeFilter('userId', '@HuConstants.HuApp.User.Tu')">兔</a>
+        </li>
+    </ul>
+    <div class="text-right mb-2">
+        <button class="btn badge-secondary" @@click="resetBalances()">Reset</button>
+    </div>
+    <div class="alert mb-3" :class="[savingStyle]">
+        Saving: {{displayCurrency(creditsTotal-debitsTotal)}}
+    </div>
+    <div id="balance" class="row align-items-end">
+        <div class="col-6">
+            <div class="other-text">
+                {{otherCredits}}
+            </div>
+            <div v-for="credit in credits">
+                <div class="credit" :style="{height:`${credit.amount/10}px`}" :title="credit.merchantName + ' ' + displayCurrency(credit.amount)">
+                    <div class="credit-text" v-if="credit.amount >= amountToHide">
+                        <span class="badge badge-secondary frequency">{{credit.frequency}}</span>
+                        <span class="merchant-name">{{credit.merchantName}} {{displayCurrency(credit.amount)}}</span>
+                    </div>
+                </div>
+            </div>
+            <div>{{displayCurrency(creditsTotal)}}</div>
+        </div>
+        <div class="col-6">
+            <div class="other-text">{{otherDebits}}</div>
+            <div v-for="debit in debits">
+                <div class="debit" :style="{height:`${debit.amount/10}px`}" :title="debit.merchantName + ' ' + displayCurrency(debit.amount)">
+                    <div class="debit-text" v-if="debit.amount >= amountToHide">
+                        <span class="badge badge-secondary frequency">{{debit.frequency}}</span>
+                        <span class="merchant-name">{{debit.merchantName}} {{displayCurrency(debit.amount)}}</span>
+                    </div>
+                </div>
+            </div>
+            <div>{{displayCurrency(debitsTotal)}}</div>
+        </div>
+    </div>
+    <div class="table-responsive mt-4">
+        <table class="table table-sm" id="transaction-table">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Date</th>
+                    <th>Item</th>
+                    <th>Merchant</th>
+                    <th class="text-right">Debit</th>
+                    <th class="text-right">Credit</th>
+                    <th class="text-center">Account</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr v-for="t in transactions">
+                    <td class="text-center"><input type="checkbox" v-model="t.inBalance" @@change="toggleBalance(t)" /></td>
+                    <td>{{displayTransactionDate(t)}}</td>
+                    <td><span :class="{'bg-info': t.ignore === t.inBalance}">{{t.itemName}}</span></td>
+                    <td>
+                        <span class="badge badge-info" v-if="t.otherItemId">O</span>
+                        <span class="badge badge-secondary" v-if="t.ignore">IGN</span>
+                        <span>{{t.merchantName}}</span>
+                        <span>{{t.merchantNote ? `(${t.merchantNote})` : ''}}</span>
+                    </td>
+                    <td class="text-right">{{t.debit ? displayCurrency(t.debit) : ''}}</td>
+                    <td class="text-right">{{t.credit ? displayCurrency(t.credit) : ''}}</td>
+                    <td class="text-center">{{t.transactionTypeId === '@HuConstants.Finance.TransactionType.CreditCard' ? 'Credit Card' : 'Chequing'}}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+@section Scripts{
+    <script>
+        var app = new Vue({
+            el: '#app',
+            data: {
+                filter: {
+                    year: @Model.Year,
+                    month: @Html.Raw(Model.Month.HasValue ? Model.Month.Value.ToString() : "null"),
+                    userId:  @Html.Raw(Model.Who.HasValue ? $"'{Model.Who}'" : "null")
+                },
+                credits: [],
+                debits: [],
+                transactions: [],
+                amountToHide: 100
+            },
+            computed: {
+                otherCredits: function () {
+                    var self = this;
+                    return this.credits
+                        .filter(x => x.amount < this.amountToHide)
+                        .map(x => `${x.merchantName} ${self.displayCurrency(x.amount)}`)
+                        .join('; ');
+                },
+                otherDebits: function () {
+                    var self = this;
+                    return this.debits
+                        .filter(x => x.amount < this.amountToHide)
+                        .map(x => `${x.merchantName} ${self.displayCurrency(x.amount)}`)
+                        .join('; ');
+                },
+                creditsTotal: function () {
+                    return this.credits.length ? this.credits.map(x => x.amount).reduce((a, b) => a + b, 0) : 0;
+                },
+                debitsTotal: function () {
+                    return this.debits.length ? this.debits.map(x => x.amount).reduce((a, b) => a + b, 0) : 0;
+                },
+                savingStyle: function () {
+                    if (this.creditsTotal === this.debitsTotal)
+                        return 'alert-info';
+                    if (this.creditsTotal > this.debitsTotal)
+                        return 'alert-success';
+                    if (this.creditsTotal < this.debitsTotal)
+                        return 'alert-danger';
+                }
+            },
+            mounted: function () {
+                this.getBalances();
+            },
+            methods: {
+                changeFilter: function (type, value) {
+                    this.filter[type] = value;
+                    this.getBalances();
+                },
+                getBalances: function () {
+                    var self = this;
+                    self.transactions = [];
+                    self.balanceGroups = { credits: {}, debits: {} };
+                    HuTool.Get({
+                        url: '/Finance/Balance?handler=Balances'
+                            + '&year=' + self.filter.year
+                            + '&month=' + self.filter.month
+                            + '&who=' + self.filter.userId,
+                        success: function (data) {
+                            self.credits = data.credits;
+                            self.debits = data.debits;
+                            self.transactions = data.transactions;
+                            self.$nextTick(function () {
+                                self.getTransationFrequency();
+                            });
+                        }
+                    });
+                },
+                toggleBalance: function (t) {
+                    var self = this;
+                    HuTool.Post({
+                        url: '/Finance/Balance?handler=ToggleBalance',
+                        data: { transactionId: t.id },
+                        success: function (data) {
+                            self.getBalances();
+                        }
+                    });
+                },
+                resetBalances: function () {
+                    var self = this;
+                    HuTool.Post({
+                        url: '/Finance/Balance?handler=ResetBalances',
+                        data: { year: self.filter.year, month: self.filter.month, userId: self.filter.userId },
+                        success: function () {
+                            self.getBalances();
+                        }
+                    });
+                },
+                getTransationFrequency: function () {
+                    var self = this;
+                    self.credits.forEach(x => {
+                        HuTool.Get({
+                            url: '/Finance/Merchants?handler=MerchantFrequency'
+                                + '&id=' + x.merchantId
+                                + '&year=' + self.filter.year,
+                            success: function (data) {
+                                self.$set(x, 'frequency', data);
+                            }
+                        });
+                    });
+                    self.debits.forEach(x => {
+                        HuTool.Get({
+                            url: '/Finance/Merchants?handler=MerchantFrequency'
+                                + '&id=' + x.merchantId
+                                + '&year=' + self.filter.year,
+                            success: function (data) {
+                                self.$set(x, 'frequency', data);
+                            }
+                        });
+                    });
+                },
+                displayTransactionDate: function (t) {
+                    var d = moment(t.date).format('YYYY-MM-DD');
+                    if (t.date !== t.originalDate) {
+                        d += ` (${moment(t.originalDate).format('YYYY-MM-DD')})`;
+                    }
+                    return d;
+                },
+                displayCurrency: function (currency) {
+                    return HuTool.Format.Currency(currency);
+                }
+            }
+        });
+    </script>
+}

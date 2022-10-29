@@ -1,0 +1,64 @@
+﻿[v-cloak] {
+    display: none;
+}
+
+#body-card {
+    margin-top: 85px;
+    margin-bottom: 30px;
+    padding: 12px;
+}
+
+.layout-menu-dropdown-toggle:after {
+    border-right: 0.25em solid transparent;
+    border-left: 0.25em solid transparent;
+    color: rgba(0,0,0,.6);
+    position: relative;
+    top: 0.03em;
+    left: 0.05em;
+}
+
+.overflow-dot {
+    white-space: nowrap;
+    overflow-x: hidden;
+    text-overflow: ellipsis;
+}
+
+.hu {
+    display: inline-block;
+    background-color: lightblue;
+    width: 25px;
+    border-radius: 15px;
+}
+
+.tu {
+    display: inline-block;
+    background-color: lightpink;
+    width: 25px;
+    border-radius: 15px;
+}
+
+.datepicker table tr td.day {
+    width: 35px;
+    height: 35px;
+}
+
+    .datepicker table tr td.day:hover,
+    .datepicker table tr td .month:hover,
+    .datepicker table tr td .year:hover {
+        background: #007bff;
+        color: #fff;
+    }
+
+.select2-container {
+    width: 100% !important;
+}
+
+.select2-selection__rendered {
+    line-height: 1.5;
+}
+
+.select2-results__option {
+    padding: 0;
+    font-size: 11px;
+    line-height: 12px;
+}

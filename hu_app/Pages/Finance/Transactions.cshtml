@@ -1,0 +1,348 @@
+﻿@page
+@model hu_app.Pages.Finance.TransactionsModel
+@{
+    ViewData["Title"] = "Finance - Transactions";
+}
+
+@section Styles{
+    <style>
+        #months {
+            overflow: auto;
+            white-space: nowrap;
+        }
+
+        .transactions-table td,
+        .transactions-table th {
+            white-space: nowrap;
+            font-size: 12px;
+            padding: 0 3px;
+        }
+
+        .header-button {
+            padding: 0;
+            font-size: 12px;
+        }
+
+        .item-name {
+            font-size: 12px;
+        }
+
+        .delete-transaction {
+            position: relative;
+            top: 1px;
+        }
+
+            .delete-transaction:hover {
+                cursor: pointer;
+            }
+
+            .delete-transaction:active {
+                top: 1.5px;
+                left: 0.5px;
+            }
+    </style>
+}
+
+<div id="app" v-cloak>
+    <button class="btn btn-secondary" style="margin-bottom:1rem" @@click="clearFilter()">Clear Filter</button>
+    <ul class="pagination">
+        <li class="page-item disabled"><a class="page-link" href="#">Account</a></li>
+        <li :class="['page-item', { active: filter.transactionTypeId === '@HuConstants.Finance.TransactionType.ChequingAccount' }]">
+            <a class="page-link" href="#" @@click="changeFilter('transactionTypeId', '@HuConstants.Finance.TransactionType.ChequingAccount')">Chequing Account</a>
+        </li>
+        <li :class="['page-item', { active: filter.transactionTypeId === '@HuConstants.Finance.TransactionType.CreditCard' }]">
+            <a class="page-link" href="#" @@click="changeFilter('transactionTypeId', '@HuConstants.Finance.TransactionType.CreditCard')">Credit Card</a>
+        </li>
+    </ul>
+    <ul class="pagination">
+        <li class="page-item disabled"><a class="page-link" href="#">Year</a></li>
+        @for (int y = 2020; y <= DateTime.Now.Year; y++)
+        {
+            <li :class="['page-item', { active: filter.year === @y }]">
+                <a class="page-link" href="#" @@click="changeFilter('year', @y)">@y</a>
+            </li>
+        }
+    </ul>
+    <div id="months">
+        @if (Model.Year.HasValue && Model.Year != 0)
+        {
+            <ul class="pagination">
+                <li class="page-item disabled">
+                    <a class="page-link" href="#">Month</a>
+                </li>
+                <li :class="['page-item', { active: filter.month === null }]">
+                    <a class="page-link" href="#" @@click="changeFilter('month', null)">All</a>
+                </li>
+                @for (int m = 1; m <= 12; m++)
+                {
+                    var month = Enum.GetName(typeof(HuEnums.Month), m);
+                    <li :class="['page-item', { active: filter.month === @m }]">
+                        <a class="page-link" href="#" @@click="changeFilter('month', @m)">@month</a>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+    <ul class="pagination">
+        <li class="page-item disabled"><a class="page-link" href="#">Who</a></li>
+        <li :class="['page-item', { active: filter.userId === '@HuConstants.HuApp.User.Hu' }]">
+            <a class="page-link" href="#" @@click="changeFilter('userId', '@HuConstants.HuApp.User.Hu')">虎</a>
+        </li>
+        <li :class="['page-item', { active: filter.userId === '@HuConstants.HuApp.User.Tu' }]">
+            <a class="page-link" href="#" @@click="changeFilter('userId', '@HuConstants.HuApp.User.Tu')">兔</a>
+        </li>
+    </ul>
+
+    <div class="form-check-inline">
+        <label class="form-check-label">
+            <input type="checkbox" class="form-check-input" v-model="hideIgnore">Hide Ignore
+        </label>
+    </div>
+    <div class="mt-2">
+        <input class="form-control" v-model="searchKeyword" />
+    </div>
+    <div class="table-responsive mt-4" v-if="transactionData.filteredTransactions.length">
+        <div>Saving: {{displayCurrency(transactionData.saving)}}</div>
+        <table class="table table-bordered table-sm transactions-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Item</th>
+                    <th>Merchant</th>
+                    <th>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <button class="btn btn-link header-button" @@click="sort('debit')">Debit</button>
+                            </div>
+                            <div>{{displayCurrency(transactionData.debitTotal)}}</div>
+                        </div>
+                    </th>
+                    <th>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <button class="btn btn-link header-button" @@click="sort('credit')">Credit</button>
+                            </div>
+                            <div>{{displayCurrency(transactionData.creditTotal)}}</div>
+                        </div>
+                    </th>
+                    <th class="text-center">Account</th>
+                    <th class="text-center">Who</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr v-for="t in transactionData.filteredTransactions">
+                    <td>{{displayTransactionDate(t)}}</td>
+                    <td>
+                        <button class="btn btn-link p-0 item-name" @@click="editTransaction(t)">{{t.itemName}}</button>
+                    </td>
+                    <td>
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <span>{{t.merchantName}}</span>
+                                <span>{{t.merchantNote ? `(${t.merchantNote})` : ''}}</span>
+                            </div>
+                            <div>
+                                <span class="badge badge-info" v-if="t.otherItemId">O</span>
+                                <span class="badge badge-secondary" v-if="t.ignore">IGN</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="text-right">{{t.debit ? displayCurrency(t.debit) : ''}}</td>
+                    <td class="text-right">{{t.credit ? displayCurrency(t.credit) : ''}}</td>
+                    <td class="text-center">{{t.transactionTypeId === '@HuConstants.Finance.TransactionType.CreditCard' ? 'Credit Card' : 'Chequing'}}</td>
+                    <td class="text-center">
+                        <span :class="{'hu': t.who === 'hu', 'tu': t.who === 'tu'}" style="width:18px">
+                            {{t.who_CN}}
+                        </span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="modal" id="transactionModal">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-4">
+                            Date:
+                        </div>
+                        <div class="col-8">
+                            {{displayDate(transaction.originalDate)}}
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-4 pt-1">
+                            Item:
+                        </div>
+                        <div class="col-8">
+                            {{transaction.itemName}}
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-4 pt-1">
+                            Other Item:
+                        </div>
+                        <div class="col-8">
+                            <select class="form-control" id="item-select">
+                                <option value="null" disabled selected>Select...</option>
+                                <option v-for="item in items" :value="item.id">{{item.name}}</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-4 pt-1">
+                            Set To Date:
+                        </div>
+                        <div class="col-8">
+                            <input class="form-control" id="newDate" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-warning" @@click="updateTransaction(true)">Reset</button>
+                    <button type="button" class="btn btn-primary" @@click="updateTransaction()">Update</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+@section Scripts{
+    <script>
+        var items = @Html.Raw(JsonConvert.SerializeObject(Model.Items));
+
+        var app = new Vue({
+            el: '#app',
+            data: {
+                filter: {
+                    transactionTypeId: @Html.Raw(Model.Type.HasValue ? $"'{Model.Type}'" : "null"),
+                    year: @Model.Year,
+                    month: @Html.Raw(Model.Month.HasValue ? Model.Month.Value.ToString() : "null"),
+                    userId:  @Html.Raw(Model.Who.HasValue ? $"'{Model.Who}'" : "null")
+                },
+                transactions: [],
+                items,
+                searchKeyword: null,
+                transaction: {
+                    id: null,
+                    itemName: null,
+                    originalDate: null,
+                    date: null
+                },
+                sortBy: null,
+                hideIgnore: false
+            },
+            computed: {
+                transactionData: function () {
+                    var keyword = this.searchKeyword?.trim().toLowerCase();
+                    var filteredTransactions = this.transactions
+                        .filter(x =>
+                            (!keyword || x.itemName.toLowerCase().includes(keyword) || x.merchantName?.toLowerCase().includes(keyword))
+                            && (!this.hideIgnore || !x.ignore || x.otherItemId)
+                        )
+                        .sort((a, b) => {
+                            if (this.sortBy === 'credit') {
+                                return b.credit - a.credit;
+                            }
+                            else if (this.sortBy === 'debit') {
+                                return b.debit - a.debit;
+                            }
+                            else {
+                                return 0;
+                            }
+                        });
+                    var debitTotal = filteredTransactions.map(function (x) { return x.debit || 0; }).reduce(function (acc, x) { return acc + x; }, 0);
+                    var creditTotal = filteredTransactions.map(function (x) { return x.credit || 0; }).reduce(function (acc, x) { return acc + x; }, 0);
+                    return { filteredTransactions, debitTotal, creditTotal, saving: creditTotal - debitTotal };
+                }
+            },
+            mounted: function () {
+                var self = this;
+                $('#newDate').datepicker({
+                    format: "yyyy-mm-dd",
+                })
+                    .on('change', function (e) {
+                        self.transaction.date = e.target.value;
+                    });
+
+                $('#item-select').select2()
+                    .on('select2:select', function (e) {
+                        self.transaction.otherItemId = e.target.value;
+                    });
+
+                this.getTransactions();
+            },
+            methods: {
+                changeFilter: function (type, value) {
+                    this.filter[type] = value;
+                    this.getTransactions();
+                },
+                clearFilter: function () {
+                    this.filter['transactionTypeId'] = null;
+                    this.filter['year'] = @DateTime.Now.Year;
+                    this.filter['month'] = @DateTime.Now.Month;
+                    this.filter['userId'] = null;
+                    this.getTransactions();
+                },
+                getTransactions: function () {
+                    var self = this;
+                    self.transactions = [];
+                    HuTool.Get({
+                        url: '/Finance/Transactions?handler=Transactions'
+                            + '&type=' + self.filter.transactionTypeId
+                            + '&year=' + self.filter.year
+                            + '&month=' + self.filter.month
+                            + '&who=' + self.filter.userId,
+                        success: function (data) {
+                            self.transactions = data;
+                        }
+                    });
+                },
+                editTransaction: function (t) {
+                    $('#newDate').datepicker('setDate', moment(t.date, 'YYYY-MM-DD').utc().format('YYYY-MM-DD'));
+                    this.transaction.id = t.id;
+                    this.transaction.itemName = t.itemName;
+                    this.transaction.originalDate = t.originalDate;
+                    this.transaction.date = t.date;
+                    this.transaction.otherItemId = t.otherItemId;
+                    $('#item-select').val(t.otherItemId);
+                    $('#item-select').trigger('change');
+                    $('#transactionModal').modal();
+                },
+                updateTransaction: function (reset) {
+                    var t = this.transaction;
+                    if (reset) {
+                        t.date = t.originalDate;
+                    }
+                    HuTool.Post({
+                        url: '/Finance/Transactions?handler=updateTransaction',
+                        data: t,
+                        success: function () {
+                            location.reload();
+                        }
+                    });
+                },
+                sort: function (field) {
+                    this.sortBy = field;
+                },
+                displayTransactionDate: function (t) {
+                    var d = moment(t.date).format('YYYY-MM-DD');
+                    if (t.date !== t.originalDate) {
+                        d += ` (${moment(t.originalDate).format('YYYY-MM-DD')})`;
+                    }
+                    return d;
+                },
+                displayDate: function (d) {
+                    return moment(d).format('YYYY-MM-DD');
+                },
+                displayCurrency: function (currency) {
+                    return HuTool.Format.Currency(currency);
+                }
+            }
+        });
+    </script>
+}

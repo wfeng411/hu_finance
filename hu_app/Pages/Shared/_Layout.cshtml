@@ -1,0 +1,139 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"]</title>
+    <link rel="stylesheet" href="~/lib/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/lib/bootstrap-datepicker.min.css" />
+    <link rel="stylesheet" href="~/lib/fontawesome.min.css" />
+    <link rel="stylesheet" href="~/lib/select2.min.css" />
+    <link rel="stylesheet" href="~/lib/snackbar.min.css" />
+    <link rel="stylesheet" href="~/styles.css" asp-append-version="true" />
+    <style>
+        body {
+            background-color: #ecf4f4;
+        }
+
+        @for(int i = 10; i < 500; i += 10)
+        {
+        <text>.w-@(i) { width: @(i)px !important; min-width: @(i)px !important; max-width: @(i)px !important; }</text>
+        }
+    </style>
+    @RenderSection("Styles", required: false)
+</head>
+<body>
+    <nav class="navbar navbar-expand-md navbar-light bg-white fixed-top border-bottom border-top shadow">
+        <div class="container">
+            <a class="navbar-brand" asp-area="" asp-page="/Dashboard">HU APP</a>
+            <button class="navbar-toggler" type="button" data-toggle="collapse" data-target=".navbar-collapse">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="navbar-collapse collapse d-md-inline-flex flex-md-row-reverse">
+                <ul class="navbar-nav flex-grow-1">
+                    <li class="nav-item">
+                        <a class="nav-link text-dark" asp-page="/Dashboard">Dashboard</a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link text-dark dropdown-toggle layout-menu-dropdown-toggle" data-toggle="dropdown" href="#">Finance</a>
+                        <div class="dropdown-menu">
+                            <a class="dropdown-item" asp-page="/Finance/Upload">Upload</a>
+                            <a class="dropdown-item" asp-page="/Finance/Transactions">Transactions</a>
+                            <a class="dropdown-item" asp-page="/Finance/Income">Income</a>
+                            <a class="dropdown-item" asp-page="/Finance/Balance">Balance</a>
+                            <a class="dropdown-item" asp-page="/Finance/Merchants">Merchants</a>
+                            <a class="dropdown-item" asp-page="/Finance/ItemIndex">Item Index</a>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    <div class="container">
+        <div class="card" id="body-card">
+            <div class="card-body">
+                @RenderBody()
+            </div>
+        </div>
+    </div>
+    <script src="~/lib/jquery.min.js"></script>
+    <script src="~/lib/bootstrap.min.js"></script>
+    <script src="~/lib/bootstrap-datepicker.min.js"></script>
+    <script src="~/lib/jquery.inputmask.min.js"></script>
+    <script src="~/lib/jquery.validate.min.js"></script>
+    <script src="~/lib/jquery.validate.unobtrusive.min.js"></script>
+    <script src="~/lib/chart.min.js"></script>
+    <script src="~/lib/moment.min.js"></script>
+    <script src="~/lib/select2.min.js"></script>
+    <script src="~/lib/snackbar.min.js"></script>
+    <script src="~/lib/vue.js"></script>
+    <script src="~/lib/uuidv4.min.js"></script>
+    <script>
+        var HuTool = {
+            Post: function (params) {
+                fetch(params.url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        RequestVerificationToken: $('input:hidden[name="__RequestVerificationToken"]').val()
+                    },
+                    body: JSON.stringify(params.data)
+                })
+                    .then(result => result.json())
+                    .then(response => {
+                        if (!response.ok) {
+                            var errors = response.errors.join(' ');
+                            Snackbar.show({ text: errors, showAction: false });
+                        } else if (params.success) {
+                            params.success(response.data);
+                        }
+                    });
+            },
+            Get: function (params) {
+                fetch(params.url, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                    .then(result => result.json())
+                    .then(response => {
+                        if (!response.ok) {
+                            var errors = response.errors.join(' ');
+                            Snackbar.show({ text: errors, showAction: false });
+                        } else if (params.success) {
+                            params.success(response.data);
+                        }
+                    });
+            },
+            Format: {
+                Currency: function (amount) {
+                    if (amount === null || amount === undefined) {
+                        return '';
+                    }
+                    var formatter = new Intl.NumberFormat('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                    });
+                    return formatter.format(amount);
+                },
+                Date: function (date) {
+                    if (date === null) {
+                        return '';
+                    }
+                    return moment(date).format('YYYY-MM-DD');
+                }
+            },
+            Guid: {
+                New: function () {
+                    return uuidv4();
+                }
+            }
+        };
+
+        Vue.filter('currency', function (value) { return HuTool.Format.Currency(value); });
+        Vue.filter('date', function (value) { return HuTool.Format.Date(value); });
+    </script>
+    @RenderSection("Scripts", required: false)
+</body>
+</html>

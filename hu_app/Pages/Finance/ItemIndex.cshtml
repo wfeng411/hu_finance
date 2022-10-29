@@ -1,0 +1,127 @@
+﻿@page
+@model hu_app.Pages.Finance.ItemIndexModel
+@{
+    ViewData["Title"] = "Finance - Item Index";
+}
+
+@section Styles {
+    <style>
+        .select2-container {
+            height: 100% !important;
+        }
+
+        .select2-selection {
+            height: 38px !important;
+        }
+
+        .select2-selection__rendered {
+            line-height: 36px !important;
+        }
+
+        .select2-selection__arrow {
+            height: 100% !important;
+        }
+
+        .item-type {
+            width: 45px;
+        }
+
+        .item-text {
+            line-height: 30px;
+        }
+    </style>
+}
+
+<div id="app" v-cloak>
+    <div class="row mb-4" id="edit-item-div">
+        <div class="col-lg-4">
+            <select class="form-control" id="merchant-select">
+                <option value="null" disabled selected>Select...</option>
+                <option v-for="m in merchants" :value="m.id">{{m.name + (m.note ? ' ( ' + m.note + ' )' : '')}}</option>
+            </select>
+        </div>
+        <div class="col-lg-4">
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text">Contains</span>
+                </div>
+                <input class="form-control" v-model="itemIndex.itemName" />
+            </div>
+        </div>
+        <div class="col-lg-4 text-right">
+            <button class="btn btn-success" @@click="saveItem()">Save</button>
+        </div>
+    </div>
+    <div class="card mt-2" v-for="i in itemIndexes">
+        <div class="row m-1">
+            <div class="col-md-4 item-text">
+                {{i.merchantName}}
+            </div>
+            <div class="col-md-5 item-text">
+                {{i.itemName}}
+            </div>
+            <div class="col-md-3 text-right mb-2 mb-md-0">
+                <button class="btn btn-sm btn-warning" @@click="editItem(i)">Edit</button>
+                <button class="btn btn-sm btn-danger" @@click="deleteItem(i.id)">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+@Html.AntiForgeryToken()
+
+@section Scripts {
+    <script>
+        var merchants = @Html.Raw(JsonConvert.SerializeObject(Model.Merchants));
+        var initMerchantId = '@Model.Merchants.FirstOrDefault(x => x.Name == "Transfer")?.Id';
+        var itemIndexes = @Html.Raw(JsonConvert.SerializeObject(Model.ItemIndexes));
+        var app = new Vue({
+            el: '#app',
+            data: {
+                merchants,
+                itemIndexes,
+                itemIndex: {
+                    id: null,
+                    itemName: '',
+                    merchantId: initMerchantId
+                }
+            },
+            mounted: function () {
+                var self = this;
+                $('#merchant-select').select2()
+                    .on('select2:select', function (e) {
+                        self.itemIndex.merchantId = e.target.value;
+                    });
+                $('#merchant-select').val(initMerchantId);
+                $('#merchant-select').trigger('change');
+            },
+            methods: {
+                editItem: function (itemIndex) {
+                    this.itemIndex.id = itemIndex.id;
+                    this.itemIndex.itemName = itemIndex.itemName;
+                    this.itemIndex.merchantId = itemIndex.merchantId;
+                    $('#merchant-select').val(itemIndex.merchantId);
+                    $('#merchant-select').trigger('change');
+                    $('html, body').animate({ scrollTop: 0 });
+                },
+                saveItem: function () {
+                    HuTool.Post({
+                        url: '/Finance/ItemIndex?handler=SaveItemIndex',
+                        data: this.itemIndex,
+                        success: function () {
+                            location.reload();
+                        }
+                    });
+                },
+                deleteItem: function (itemIndexId) {
+                    HuTool.Post({
+                        url: '/Finance/ItemIndex?handler=DeleteItemIndex',
+                        data: { id: itemIndexId },
+                        success: function () {
+                            location.reload();
+                        }
+                    });
+                },
+            }
+        });
+    </script>
+}

@@ -1,0 +1,254 @@
+﻿@page
+@model hu_app.Pages.Finance.MerchantsModel
+@{
+    ViewData["Title"] = "Finance - Merchants";
+}
+
+@section Styles {
+    <style>
+    </style>
+}
+
+<div id="app" v-cloak>
+    <div class="mb-3 d-flex align-items-center justify-content-between">
+        <div class="form-check">
+            <label class="form-check-label">
+                <input type="checkbox" class="form-check-input" v-model="showOld">Show Old Merchants
+            </label>
+        </div>
+        <button class="btn btn-primary"
+                data-toggle="modal"
+                data-target="#editMerchantModal"
+                data-backdrop="static"
+                @@click="addMerchant()">
+            Add Merchant
+        </button>
+    </div>
+    <div class="mb-3">
+        <input class="form-control" v-model="itemSearch" />
+    </div>
+    <div id="accordion">
+        <div :class="['card', {'mt-1': isSameExpenseType(index), 'mt-5': !isSameExpenseType(index)}]"
+             v-for="(merchant, index) in merchantDetails"
+             v-if="!merchant.isOld || showOld">
+            <div class="card-header pt-1 pb-1 pl-2 pr-2" data-toggle="collapse" :href="'#collapse' + merchant.id">
+                <div class="d-flex justify-content-between align-content-center">
+                    <div class="overflow-dot">
+                        <span class="badge badge-success" v-if="merchant.expenseTypeId === '@HuConstants.Finance.ExpenseType.Income'">Income</span>
+                        <span class="badge badge-info" v-if="merchant.ignore">IGN</span>
+                        <button class="btn btn-link p-0 overflow-dot"
+                                v-if="merchant.id"
+                                @@click="editMerchant($event, merchant)">
+                            {{merchant.merchantName}}{{merchant.note ? ' ( ' + merchant.note + ' )' : null}}
+                        </button>
+                        <div v-else>
+                            {{merchant.merchantName}}{{merchant.note ? ' ( ' + merchant.note + ' )' : null}}
+                        </div>
+                    </div>
+                    <div class="ml-2 d-flex">
+                        <button class="btn btn-sm btn-danger mr-2 pt-0 pb-0"
+                                v-if="merchant.items.length === 0"
+                                @@click="deleteMerchant(merchant.id)">
+                            Delete
+                        </button>
+                        <span class="ml-4">{{expenseTypesDict[merchant.expenseTypeId]}}</span>
+                    </div>
+                </div>
+            </div>
+            <div :class="['collapse', merchant.id ? '' : 'show']" data-parent="#accordion" :id="'collapse' + merchant.id">
+                <div class="overflow-dot" v-for="item in merchant.items">
+                    <button class="btn btn-link ml-4 p-0 overflow-dot"
+                            data-toggle="modal"
+                            data-target="#selectMerchantModal"
+                            data-backdrop="static"
+                            @@click="selectMerchant(item)">
+                        {{item.itemName}}
+                    </button>
+                    <button class="btn btn-primary btn-sm pt-0 pb-0 mr-3 my-1 float-right"
+                            data-toggle="modal"
+                            data-target="#editMerchantModal"
+                            data-backdrop="static"
+                            v-if="!item.merchantId"
+                            @@click="addMerchant(item)">
+                        Add Merchant
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <partial name="_EditMerchant" />
+    <div class="modal" id="selectMerchantModal">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-body">
+                    <div>
+                        <span class="font-weight-bolder mr-2">Item:</span>
+                        {{item.itemName}}
+                    </div>
+                    <div class="d-flex align-content-center mt-2">
+                        <div class="font-weight-bolder mr-2">Merchant:</div>
+                        <div class="flex-grow-1">
+                            <select class="form-control" id="merchant-select">
+                                <option value="null" disabled>Select...</option>
+                                <option v-for="m in merchants" :value="m.id">{{m.name + (m.note ? ' ( ' + m.note + ' )' : '')}}</option>
+                            </select>
+                        </div>
+                    </div>
+                    <table class="table table-sm table-borderless">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Date</th>
+                                <th>Debit</th>
+                                <th>Credit</th>
+                            </tr>
+                        </thead>
+                        <tr v-for="t in transactions">
+                            <td>{{t.who_CN}}</td>
+                            <td>{{displayDate(t.date)}}</td>
+                            <td>{{displayCurrency(t.debit)}}</td>
+                            <td>{{displayCurrency(t.credit)}}</td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="item-update-button" @@click="saveItem()">{{item.merchantId ? 'Update' : 'Select'}}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@Html.AntiForgeryToken()
+
+@section Scripts{
+    <script>
+        var expenseTypesDict = @Html.Raw(JsonConvert.SerializeObject(Model.ExpenseTypesDict));
+        var merchantDetailsData = @Html.Raw(JsonConvert.SerializeObject(Model.MerchantDetailDTOs));
+        var merchants = @Html.Raw(JsonConvert.SerializeObject(Model.MerchantDTOs));
+        var app = new Vue({
+            el: '#app',
+            data: {
+                merchantDetailsData,
+                merchants,
+                transactions: [],
+                merchant: {
+                    id: null,
+                    merchantName: null,
+                    note: null,
+                    expenseTypeId: null,
+                    ignore: false
+                },
+                item: {
+                    id: null,
+                    itemName: null,
+                    merchantId: null
+                },
+                showOld: false,
+                itemSearch: '',
+                expenseTypesDict
+            },
+            computed: {
+                merchantDetails: function () {
+                    var keyword = this.itemSearch.trim();
+                    if (keyword === '') {
+                        return this.merchantDetailsData;
+                    }
+                    return this.merchantDetailsData.filter(x => {
+                        return x.items.some(item => item.itemName.toUpperCase().includes(keyword.toUpperCase()));
+                    });
+                }
+            },
+            mounted: function () {
+                var self = this;
+                $('#merchant-select').select2()
+                    .on('select2:select', function (e) {
+                        self.item.merchantId = e.target.value;
+                        $('#item-update-button').focus();
+                    });
+                $("#selectMerchantModal").on('shown.bs.modal', function () {
+                    setTimeout(function () {
+                        $('#merchant-select').select2('open');
+                    }, 100);
+                });
+            },
+            methods: {
+                addMerchant: function (item) {
+                    this.merchant = {
+                        id: null,
+                        merchantName: item?.itemName ?? null,
+                        note: null,
+                        expenseTypeId: null,
+                        ignore: false
+                    };
+                },
+                selectMerchant: function (item) {
+                    var self = this;
+                    self.item = {
+                        id: item.id,
+                        itemName: item.itemName,
+                        merchantId: item.merchantId
+                    };
+                    $('#merchant-select').val(item.merchantId);
+                    $('#merchant-select').trigger('change');
+                    self.transactions = [];
+                    HuTool.Get({
+                        url: '/Finance/Merchants?handler=Transactions&itemId=' + item.id,
+                        success: function (data) {
+                            self.transactions = data;
+                        }
+                    });
+                },
+                editMerchant: function (event, merchant) {
+                    event.stopPropagation();
+                    this.merchant = {
+                        id: merchant.id,
+                        merchantName: merchant.merchantName,
+                        note: merchant.note,
+                        expenseTypeId: merchant.expenseTypeId,
+                        ignore: merchant.ignore
+                    };
+                    $('#editMerchantModal').modal({ backdrop: 'static' });
+                },
+                saveMerchant: function () {
+                    HuTool.Post({
+                        url: '/Finance/Merchants?handler=SaveMerchant',
+                        data: this.merchant,
+                        success: function () {
+                            location.reload();
+                        }
+                    });
+                },
+                deleteMerchant: function (merchantId) {
+                    HuTool.Post({
+                        url: '/Finance/Merchants?handler=DeleteMerchant',
+                        data: { id: merchantId },
+                        success: function () {
+                            location.reload();
+                        }
+                    });
+                },
+                saveItem: function () {
+                    HuTool.Post({
+                        url: '/Finance/Merchants?handler=SaveItem',
+                        data: this.item,
+                        success: function () {
+                            location.reload();
+                        }
+                    });
+                },
+                isSameExpenseType: function (mIndex) {
+                    if (mIndex === 0) return true;
+                    return this.merchantDetails[mIndex].expenseTypeId === this.merchantDetails[mIndex - 1].expenseTypeId;
+                },
+                displayDate: function (date) {
+                    return moment(date).format('YYYY-MM-DD');
+                },
+                displayCurrency: function (currency) {
+                    return HuTool.Format.Currency(currency);
+                }
+            }
+        });
+    </script>
+}
+
